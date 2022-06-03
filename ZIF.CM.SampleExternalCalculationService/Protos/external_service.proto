@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option csharp_namespace = "ZIF.ExternalServiceEvaluation";
+
+//Сервис и его методы
+service ExternalServiceEvaluationService {
+    rpc Evaluate(EvaluationRequest) returns (EvaluationResponse); //Принимает запрос на выполнение расчета, возвращает результат расчета
+    rpc GetMetadata(google.protobuf.Empty) returns (MetadataResponse); //Ничего не принимает, возвращает метаданные о реализованном внешнем сервисе расчетов
+}
+
+//Типы используемые в методе Evaluate
+
+//Запрос на выполнение расчета
+message EvaluationRequest {
+    map<string, Parameter> parameters = 1; //Словарь АлиасПараметраЗапроса:ПараметрЗапроса(ИД свойства ОМ, Значение, Качество)
+    .google.protobuf.Timestamp timestamp = 2; //Время на которое получено значения параметров запроса и время на которое будет записан результат расчета
+    bool is_recalculation = 3; //Появился ли этот запрос в результате перерасчета
+    optional string calculation_id = 4; //Идентификатор расчета(расчетного свойства ОМ) вычисление которого производится.
+    //Может использоваться для вызова контекстных функций при реализации накопительных алгоритмов (напр. prev(5m)+1).
+    //Не передается для расчетов с типом запуска "OnDemand", так как использование контекстных функций с таким типом запука
+    //может привести к бесконечным рекурсивным вызовам внешнего сервиса (напр. prev(5m) будет вызывать внешний сервис бесконечно, каждый раз убавляя timestamp на 5 минут).
+    string calculation_version_id = 5;  //Идентификатор версии расчета. Меняется при каждом обновлении конфигурации расчета в ОМ.
+    //Удобно использовать, например, как ключ для кеширования в памяти и/или Redis.
+}
+
+//Ответ
+message EvaluationResponse {
+    TypedValue result = 1; //Значение результата
+    ValueQuality quality = 2; //Качество. По-умолчанию GOOD
+}
+
+//Параметр запроса на выполнение расчета (В каждом запросе несколько параметров)
+message Parameter {
+    optional string property_id = 1; //Идентификатор свойства ОМ (Пусто для констант)
+    TypedValue value = 2; //Значение параметра
+    ValueQuality quality = 3; //Качество (приходит в БДВР от поставщиков данных, далее во внешний сервис расчетов, по-умолчанию GOOD)
+}
+
+//Специальный тип, который может эффективно нести в себе значения разных типов (oneof)
+//Используется в параметрах запроса на выполнение расчета и в ответе
+message TypedValue {
+    oneof typed_value_oneof {
+        bool boolean = 1;
+        .google.protobuf.Timestamp date_time = 2;
+        string decimal = 3;
+        double double = 4;
+        string guid = 5;
+        int32 integer = 6;
+        int64 long = 7;
+        string string = 8;
+    }
+}
+
+//Перечисление качества сигнала. Передается с параметрами запроса, может быть указано вместе с результатом расчета
+enum ValueQuality {
+    VALUE_QUALITY_GOOD = 0;
+    VALUE_QUALITY_BAD = 1;
+}
+
+
+//Типы используемые в методе GetMetadata
+
+//Ответ на запрос метаданных о реализованном внешнем сервисе расчетов
+message MetadataResponse {
+    map<string, ParameterMetadata> parameters = 1; //Словарь АлиасПараметраЗапроса:МетаДанныеОПараметреЗапроса(Тип значения, Описание).
+    ResultMetadata result = 2; //Метаданные о результате расчета
+    optional string description = 3; //Описание внешнего сервиса расчетов
+    optional string author = 4; //Автор внешнего сервиса расчетов
+    optional .google.protobuf.Timestamp last_modified_utc = 5; //Время последнего измненения внешнего сервиса расчетов
+    optional string extended_description_url = 6; //Ссылка на документ с расширенным описанием внешнего сервиса расчетов
+}
+
+//Метаданные о параметре внешнего сервиса расчета
+message ParameterMetadata {
+    ValueType value_type = 1; //Тип значения параметра
+    optional string description = 2; //Описание параметра
+}
+
+//Метаданные об ответе внешнего сервиса расчета
+message ResultMetadata {
+    ValueType value_type = 1; //Тип значения ответа
+    optional string description = 2; //Описание ответа
+}
+
+//Перечисление с возможными типами параметров запросов расчета и ответа расчета
+//Совпадает с возможными типами typed_value_oneof
+//Совпадает с ValueTypes из OM (кроме DirectoryItem)
+enum ValueType {
+    VALUE_TYPE_UNSPECIFIED = 0;
+    VALUE_TYPE_BOOLEAN = 1;
+    VALUE_TYPE_DATETIME = 2;
+    VALUE_TYPE_DECIMAL = 3;
+    VALUE_TYPE_DOUBLE = 4;
+    VALUE_TYPE_GUID = 5;
+    VALUE_TYPE_INTEGER = 6;
+    VALUE_TYPE_LONG = 7;
+    VALUE_TYPE_STRING = 8;
+}

@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: zif-cm-sample-external-calculation-service
+  name: zif-cm-sample-external-calculation-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zif-cm-sample-external-calculation-service
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: zif-cm-sample-external-calculation-service
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - zif-cm-sample-external-calculation-service
+                topologyKey: kubernetes.io/hostname
+              weight: 100
+      containers:
+        - env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: Logging__LogLevel__Default
+              value: Information
+            - name: Logging__LogLevel__Microsoft.AspNetCore
+              value: Information
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+          image: registry.example.com/example/zif-sample-external-calculation-service:1.0.0
+          imagePullPolicy: Always
+          name: zif-cm-sample-external-calculation-service
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+            requests:
+              cpu: 300m
+              memory: 256Mi
